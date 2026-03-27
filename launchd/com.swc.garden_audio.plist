@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!--
+  com.swc.garden_audio.plist
+  Runs the garden audio daily pipeline at 07:00.
+  Processes the previous day's data (yesterday's date).
+
+  Install:
+    cp launchd/com.swc.garden_audio.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.swc.garden_audio.plist
+
+  Unload:
+    launchctl unload ~/Library/LaunchAgents/com.swc.garden_audio.plist
+-->
+<dict>
+    <key>Label</key>
+    <string>com.swc.garden_audio</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/swc/Desktop/SWC/software/venv/bin/python</string>
+        <string>-m</string>
+        <string>garden_audio.pipeline</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/swc/Desktop/SWC/software</string>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>7</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/swc/Desktop/SWC/software/daily_datasets/launchd_stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/swc/Desktop/SWC/software/daily_datasets/launchd_stderr.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>

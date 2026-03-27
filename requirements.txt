@@ -1,0 +1,7 @@
+numpy
+opencv-python
+PyQt5
+pyloudnorm
+soundfile
+python-osc
+matplotlib

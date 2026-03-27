@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+
+# macOS
+.DS_Store
+
+# IDE
+.cursor/
+
+# Calibration data (binary, per-deployment)
+calibration/*.npy
+calibration.npz
+dark_frame.npy
+flat_field.npy
+
+# VmbPy wheel (large binary, install separately)
+*.whl
+
+# Runtime data -- images, audio, and pipeline output
+incoming_data/
+daily_datasets/
+module_configs/
+renders/
+snapshots/
+
+# Source audio library (large WAV/AIFF files)
+audio_batches/**/*.wav
+audio_batches/**/*.aif
+audio_batches/**/*.aiff
+
+# User presets are local to each installation
+user_presets/*.json
+
+# Pi local capture buffer
+capture_buffer/
+
+# SuperCollider NRT intermediate files
+*.osc
+
+# Logs
+*.log

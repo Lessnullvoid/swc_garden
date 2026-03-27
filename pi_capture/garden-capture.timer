@@ -1,0 +1,18 @@
+# garden-capture.timer
+# Fires the garden-capture.service every 10 minutes.
+#
+# Install:
+#   sudo cp garden-capture.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now garden-capture.timer
+
+[Unit]
+Description=Run garden capture every 10 minutes
+
+[Timer]
+OnCalendar=*:0/10
+Persistent=true
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target

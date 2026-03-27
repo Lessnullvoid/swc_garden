@@ -1,0 +1,28 @@
+# garden-capture.service
+# Systemd service unit for headless frame capture on Raspberry Pi.
+#
+# Install:
+#   sudo cp garden-capture.service /etc/systemd/system/
+#   sudo cp garden-capture.timer   /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now garden-capture.timer
+#
+# Edit ExecStart to set your Mac IP. Camera ID is auto-detected from hostname.
+
+[Unit]
+Description=Garden camera capture and send to Mac
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pi
+Environment=GENICAM_GENTL64_PATH=/opt/VimbaX/cti
+WorkingDirectory=/home/pi/software
+ExecStart=/home/pi/software/venv/bin/python pi_capture/capture_and_send.py --mac-host 192.168.178.25
+TimeoutStartSec=60
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
