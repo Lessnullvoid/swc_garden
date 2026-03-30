@@ -324,6 +324,8 @@ Thorlabs or Edmund Optics.
                                 monitor_app.py (optional)
                                 same pipeline, live PyQt5 GUI
 
+![Monitor application](img/monitor.png)
+
 ### Stage 1 -- Raspberry Pi capture (pi_capture/)
 
 Each Pi runs a capture script as a long-lived process (or via systemd timer).
@@ -520,6 +522,8 @@ A real-time tuning interface for auditioning and refining each SC module:
 source venv/bin/activate
 python -m exploration.explorer_gui
 ```
+
+![SC Module Explorer](img/explorer.png)
 
 The Explorer boots SuperCollider via `explorer_server.scd`, which defines
 all 4 module SynthDefs and listens for OSC commands on port 57120. The
