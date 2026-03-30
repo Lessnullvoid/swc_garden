@@ -632,7 +632,10 @@ class MonitorWindow(QtWidgets.QMainWindow):
         rgb_frame = None
         jpg_path = parent / f"{stem}.jpg"
         if jpg_path.exists():
-            rgb_frame = cv2.imread(str(jpg_path))
+            rgb_raw = cv2.imread(str(jpg_path))
+            if rgb_raw is not None:
+                gray = cv2.cvtColor(rgb_raw, cv2.COLOR_BGR2GRAY)
+                rgb_frame = reflectance_colormap(gray)
 
         entry = {
             "index": len(self._history) + 1,

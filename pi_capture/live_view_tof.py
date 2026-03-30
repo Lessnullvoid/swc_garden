@@ -127,18 +127,18 @@ def capture_loop():
     import ArducamDepthCamera as ac
 
     cam = ac.ArducamCamera()
-    ret = cam.open(ac.TOFConnect.CSI, 0)
+    ret = cam.open(ac.Connection.CSI, 0)
     if ret != 0:
         log.error("Failed to open Arducam ToF camera (error %d)", ret)
         return
 
-    ret = cam.start(ac.TOFOutput.DEPTH)
+    ret = cam.start(ac.FrameType.DEPTH)
     if ret != 0:
         log.error("Failed to start camera (error %d)", ret)
         cam.close()
         return
 
-    depth_range = cam.getControl(ac.TOFControl.RANGE)
+    depth_range = cam.getControl(ac.Control.RANGE)
     info = cam.getCameraInfo()
     log.info(
         "ToF camera started: %dx%d, range=%.2fm",
@@ -152,8 +152,8 @@ def capture_loop():
             continue
 
         try:
-            depth = frame.getDepthData()
-            amplitude = frame.getAmplitudeData()
+            depth = frame.depth_data
+            amplitude = frame.amplitude_data
         except Exception as exc:
             log.warning("Frame data error: %s", exc)
             cam.releaseFrame(frame)

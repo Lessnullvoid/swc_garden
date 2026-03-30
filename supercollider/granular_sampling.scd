@@ -1,12 +1,14 @@
 // granular_sampling.scd
-// Microcosm-inspired granular processor: TGrains grain engine with Phasor
-// scanning, feedback delay smear, FreeVerb2 reverb, and dry/wet blend.
+// Multi-algorithm granular processor (design inspired by Hologram Microcosm).
+// 5 grain algorithms: Haze, Mosaic, Tunnel, Strum, Glide.
+// SelectX for smooth scan between neighbors.
+// Shared post-processing: RLPF -> delay/feedback -> FreeVerb2 -> dry/wet.
 // Reads ~configPath from the interpreter environment (set by run_daily.scd).
 
 (
 var config, params, audioBatchDir, outputDir, duration;
 var audioFiles, score, outPath, oscPath;
-var grainDensity, grainDuration, posRate, posJitter;
+var algo, grainDensity, grainDuration, posRate, posJitter;
 var rate, rateJitter, panWidth;
 var lpf, delayMix, delayTime, feedback, reverbMix, dryMix;
 var ampAttack, ampDecay;
@@ -19,6 +21,7 @@ audioBatchDir = config["audio_batch_dir"];
 outputDir = config["output_dir"];
 duration = config["duration"].asFloat;
 
+algo = params["algo"].asFloat;
 grainDensity = params["grain_density"].asFloat;
 grainDuration = params["grain_duration"].asFloat;
 posRate = params["pos_rate"].asFloat;
@@ -54,6 +57,7 @@ if(audioFiles.size == 0, {
 
     score.add([0.0, [\d_recv, SynthDef(\gardenMicrocosm, { |out = 0,
         bufnum = 0,
+        algo = 0,
         dens = 20, dur = 0.12,
         pRate = 0.03, pJitter = 0.08,
         rt = 1.0, rtJitter = 0.15,
@@ -65,39 +69,80 @@ if(audioFiles.size == 0, {
         attack = 2.0, sustain = 116.0, release = 2.0,
         amp = 0.5|
 
-        var trig, ptr, grainPos, grainRate, pan, grains;
+        var frames, bufDur, bufScale;
+        var haze, mosaic, tunnel, strum, glide;
+        var grains;
         var filtered, delayed, wet, sig, env;
-        var frames, bufDur;
 
         frames = BufFrames.kr(bufnum);
         bufDur = BufDur.kr(bufnum);
+        bufScale = BufRateScale.kr(bufnum);
 
-        trig = Dust.ar(dens);
+        // -- Algorithm 0: Haze (original behavior) --
+        haze = {
+            var trig = Dust.ar(dens);
+            var ptr = Phasor.ar(0, bufScale * pRate, 0, frames) / frames;
+            var gPos = (ptr + TRand.ar(pJitter.neg, pJitter, trig)).wrap(0, 1);
+            var gRate = rt * TExpRand.ar(1 / (1 + rtJitter), 1 + rtJitter, trig);
+            var pan = TRand.ar(pWidth.neg, pWidth, trig);
+            TGrains.ar(2, trig, bufnum, gRate, gPos * bufDur, dur, pan, 3.0, 4);
+        }.value;
 
-        ptr = Phasor.ar(
-            trig: 0,
-            rate: BufRateScale.kr(bufnum) * pRate,
-            start: 0,
-            end: frames
-        ) / frames;
+        // -- Algorithm 1: Mosaic (multi-speed overlapping layers) --
+        mosaic = {
+            var trig1 = Dust.ar(dens * 0.5);
+            var trig2 = Dust.ar(dens * 0.35);
+            var trig3 = Dust.ar(dens * 0.35);
+            var ptr = Phasor.ar(0, bufScale * pRate, 0, frames) / frames;
+            var gPos1 = (ptr + TRand.ar(pJitter.neg, pJitter, trig1)).wrap(0, 1);
+            var gPos2 = (ptr + TRand.ar(pJitter.neg * 1.5, pJitter * 1.5, trig2)).wrap(0, 1);
+            var gPos3 = (ptr + TRand.ar(pJitter.neg * 0.5, pJitter * 0.5, trig3)).wrap(0, 1);
+            var pan1 = TRand.ar(pWidth.neg, pWidth, trig1);
+            var pan2 = TRand.ar(pWidth.neg, pWidth, trig2);
+            var pan3 = TRand.ar(pWidth.neg, pWidth, trig3);
+            var lo = TGrains.ar(2, trig1, bufnum, rt * 0.5, gPos1 * bufDur, dur * 1.5, pan1, 2.0, 4);
+            var mid = TGrains.ar(2, trig2, bufnum, rt, gPos2 * bufDur, dur, pan2, 2.0, 4);
+            var hi = TGrains.ar(2, trig3, bufnum, rt * 2.0, gPos3 * bufDur, dur * 0.6, pan3, 1.5, 4);
+            (lo + mid + hi) * 0.55;
+        }.value;
 
-        grainPos = (ptr + TRand.ar(pJitter.neg, pJitter, trig)).wrap(0, 1);
+        // -- Algorithm 2: Tunnel (tight loop drone) --
+        tunnel = {
+            var trig = Dust.ar(dens * 2);
+            var ptr = Phasor.ar(0, bufScale * pRate * 0.08, 0, frames) / frames;
+            var gPos = (ptr + TRand.ar(pJitter.neg * 0.15, pJitter * 0.15, trig)).wrap(0, 1);
+            var gRate = rt * TExpRand.ar(0.995, 1.005, trig);
+            var pan = TRand.ar(pWidth.neg * 0.4, pWidth * 0.4, trig);
+            TGrains.ar(2, trig, bufnum, gRate, gPos * bufDur, dur * 2.0, pan, 2.5, 4);
+        }.value;
 
-        grainRate = rt * TExpRand.ar(1 / (1 + rtJitter), 1 + rtJitter, trig);
-        pan = TRand.ar(pWidth.neg, pWidth, trig);
+        // -- Algorithm 3: Strum (rhythmic cascades) --
+        strum = {
+            var trig = Impulse.ar(dens);
+            var ptr = Phasor.ar(0, bufScale * pRate * 1.5, 0, frames) / frames;
+            var gPos = (ptr + TRand.ar(pJitter.neg * 0.3, pJitter * 0.3, trig)).wrap(0, 1);
+            var gRate = rt * TExpRand.ar(1 / (1 + (rtJitter * 0.5)), 1 + (rtJitter * 0.5), trig);
+            var pan = TRand.ar(pWidth.neg, pWidth, trig);
+            TGrains.ar(2, trig, bufnum, gRate, gPos * bufDur, dur * 0.7, pan, 3.0, 4);
+        }.value;
 
-        grains = TGrains.ar(
-            numChannels: 2,
-            trigger: trig,
-            bufnum: bufnum,
-            rate: grainRate,
-            centerPos: grainPos * bufDur,
-            dur: dur,
-            pan: pan,
-            amp: 3.0,
-            interp: 4
-        );
+        // -- Algorithm 4: Glide (pitch-shifting shimmer) --
+        glide = {
+            var trig = Dust.ar(dens * 0.8);
+            var ptr = Phasor.ar(0, bufScale * pRate * 1.8, 0, frames) / frames;
+            var gPos = (ptr + TRand.ar(pJitter.neg, pJitter, trig)).wrap(0, 1);
+            var drift = SinOsc.kr(0.07 + (rtJitter * 0.3)).range(0.85, 1.18);
+            var gRate = rt * drift * TExpRand.ar(0.97, 1.03, trig);
+            var pan = TRand.ar(pWidth.neg, pWidth, trig);
+            TGrains.ar(2, trig, bufnum, gRate, gPos * bufDur, dur * 1.3, pan, 2.8, 4);
+        }.value;
 
+        // -- Algorithm Selection --
+        grains = SelectX.ar(algo.clip(0, 4), [
+            haze, mosaic, tunnel, strum, glide
+        ]);
+
+        // -- Shared Post-Processing (unchanged) --
         filtered = RLPF.ar(grains, lpfFreq.clip(80, 18000), 0.5);
 
         delayed = LocalIn.ar(2);
@@ -136,6 +181,7 @@ if(audioFiles.size == 0, {
 
         score.add([startTime, [\s_new, \gardenMicrocosm, 1000 + i, 0, 0,
             \bufnum, i,
+            \algo, algo,
             \dens, grainDensity,
             \dur, grainDuration,
             \pRate, posRate,

@@ -44,15 +44,15 @@ Large-space reverb using `FreeVerb2` with optional pre-delay.
 - p3: pre-delay amount (0 -- 80 ms)
 
 ### 1 -- Ping-Pong Delay
-Stereo alternating delay with cross-feedback using two `CombC` lines.
+Stereo delay pair with cross-channel mixing using self-contained `CombC` lines.
 - p1: delay time (50 ms -- 1.2 s, exponential)
-- p2: feedback (0.05 -- 0.85)
-- p3: stereo cross amount (-1 to +1)
+- p2: decay time (0.2 -- 6.0 s)
+- p3: stereo cross amount (0 -- 50%)
 
 ### 2 -- Tape Echo
 Filtered delay with LFO wow/flutter modulation for analog character.
 - p1: echo time (80 ms -- 0.8 s, exponential)
-- p2: feedback (0.1 -- 0.8)
+- p2: decay time (0.5 -- 8.0 s)
 - p3: wow/flutter depth and rate
 
 ### 3 -- Chorus

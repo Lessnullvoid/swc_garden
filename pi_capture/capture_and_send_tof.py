@@ -59,16 +59,16 @@ def _capture_tof_frame():
     import ArducamDepthCamera as ac
 
     cam = ac.ArducamCamera()
-    ret = cam.open(ac.TOFConnect.CSI, 0)
+    ret = cam.open(ac.Connection.CSI, 0)
     if ret != 0:
         raise RuntimeError(f"Failed to open ToF camera (error {ret})")
 
-    ret = cam.start(ac.TOFOutput.DEPTH)
+    ret = cam.start(ac.FrameType.DEPTH)
     if ret != 0:
         cam.close()
         raise RuntimeError(f"Failed to start ToF camera (error {ret})")
 
-    depth_range = cam.getControl(ac.TOFControl.RANGE)
+    depth_range = cam.getControl(ac.Control.RANGE)
     info = cam.getCameraInfo()
 
     frame = cam.requestFrame(5000)
@@ -78,9 +78,9 @@ def _capture_tof_frame():
         raise RuntimeError("ToF frame request timed out")
 
     try:
-        depth = frame.getDepthData().copy()
-        confidence = frame.getConfidenceData().copy()
-        amplitude = frame.getAmplitudeData().copy()
+        depth = frame.depth_data.copy()
+        confidence = frame.confidence_data.copy()
+        amplitude = frame.amplitude_data.copy()
     except Exception as exc:
         cam.releaseFrame(frame)
         cam.stop()

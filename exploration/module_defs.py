@@ -9,11 +9,88 @@ Each module is described by an ordered list of parameter dicts with:
 from __future__ import annotations
 
 
+MULTI_FX_ALGO_INFO: list[dict[str, str]] = [
+    {"name": "Hall Reverb",
+     "p1": "Room Size", "p2": "Damping", "p3": "Pre-delay"},
+    {"name": "Ping-Pong Delay",
+     "p1": "Delay Time", "p2": "Decay Time", "p3": "Stereo Cross"},
+    {"name": "Tape Echo",
+     "p1": "Echo Time", "p2": "Decay Time", "p3": "Wow/Flutter"},
+    {"name": "Chorus",
+     "p1": "Mod Rate", "p2": "Mod Depth", "p3": "Feedback"},
+    {"name": "Overdrive",
+     "p1": "Drive Gain", "p2": "Tone / LPF", "p3": "Asymmetry"},
+    {"name": "Freezer",
+     "p1": "Freeze Thr", "p2": "(reserved)", "p3": "Spectral Blur"},
+]
+
+
+def get_multifx_algo_info(algo: float) -> dict[str, str]:
+    """Return algo name and p1/p2/p3 labels for the current algo value.
+
+    When algo sits between two integers, blends the names (e.g. "Hall > Ping-Pong").
+    """
+    idx = max(0.0, min(5.0, algo))
+    lo = int(idx)
+    hi = min(lo + 1, 5)
+    frac = idx - lo
+
+    lo_info = MULTI_FX_ALGO_INFO[lo]
+    hi_info = MULTI_FX_ALGO_INFO[hi]
+
+    if frac < 0.15:
+        name = lo_info["name"]
+        p1, p2, p3 = lo_info["p1"], lo_info["p2"], lo_info["p3"]
+    elif frac > 0.85:
+        name = hi_info["name"]
+        p1, p2, p3 = hi_info["p1"], hi_info["p2"], hi_info["p3"]
+    else:
+        name = f"{lo_info['name']} > {hi_info['name']}"
+        p1 = f"{lo_info['p1']} > {hi_info['p1']}"
+        p2 = f"{lo_info['p2']} > {hi_info['p2']}"
+        p3 = f"{lo_info['p3']} > {hi_info['p3']}"
+
+    return {"name": name, "p1": p1, "p2": p2, "p3": p3}
+
+
+GRANULAR_ALGO_INFO: list[dict[str, str]] = [
+    {"name": "Haze", "desc": "Grain cloud wash (Dust triggers, slow scan, pitch jitter)"},
+    {"name": "Mosaic", "desc": "Multi-speed layers (0.5x + 1x + 2x overlapping)"},
+    {"name": "Tunnel", "desc": "Tight loop drone (high density, minimal jitter)"},
+    {"name": "Strum", "desc": "Rhythmic cascades (Impulse triggers, even chains)"},
+    {"name": "Glide", "desc": "Pitch-shifting shimmer (LFO drift, fast scan)"},
+]
+
+
+def get_granular_algo_info(algo: float) -> dict[str, str]:
+    """Return algo name and description for the current granular algo value."""
+    idx = max(0.0, min(4.0, algo))
+    lo = int(idx)
+    hi = min(lo + 1, 4)
+    frac = idx - lo
+
+    lo_info = GRANULAR_ALGO_INFO[lo]
+    hi_info = GRANULAR_ALGO_INFO[hi]
+
+    if frac < 0.15:
+        return {"name": lo_info["name"], "desc": lo_info["desc"]}
+    elif frac > 0.85:
+        return {"name": hi_info["name"], "desc": hi_info["desc"]}
+    else:
+        return {
+            "name": f"{lo_info['name']} > {hi_info['name']}",
+            "desc": f"{lo_info['desc']} / {hi_info['desc']}",
+        }
+
+
 MODULES: dict[str, dict] = {
     "granular_sampling": {
         "synthdef": "gardenMicrocosm",
         "label": "Granular",
         "params": [
+            {"name": "algo", "sc_arg": "algo",
+             "min": 0.0, "max": 4.0, "step": 0.01, "default": 0.0,
+             "label": "Algorithm (0-4)"},
             {"name": "grain_density", "sc_arg": "dens",
              "min": 4, "max": 80, "step": 0.5, "default": 20,
              "label": "Grain Density (Hz)"},

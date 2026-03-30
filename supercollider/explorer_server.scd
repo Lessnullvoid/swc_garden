@@ -32,6 +32,7 @@ s.waitForBoot({
     // -- SynthDef: gardenMicrocosm (granular_sampling) -----------------------
 
     SynthDef(\gardenMicrocosm, { |out = 0, bufnum = 0, gate = 1,
+        algo = 0,
         dens = 20, dur = 0.12,
         pRate = 0.03, pJitter = 0.08,
         rt = 1.0, rtJitter = 0.15,
@@ -42,22 +43,81 @@ s.waitForBoot({
         drMix = 0.2,
         amp = 0.5|
 
-        var trig, ptr, grainPos, grainRate, pan, grains;
+        var frames, bufDur, bufScale;
+        var algoS;
+        var haze, mosaic, tunnel, strum, glide;
+        var grains;
         var filtered, delayed, wet, sig, env;
-        var frames, bufDur;
 
+        algoS = algo.lag(0.5);
         frames = BufFrames.kr(bufnum);
         bufDur = BufDur.kr(bufnum);
-        trig = Dust.ar(dens);
-        ptr = Phasor.ar(0, BufRateScale.kr(bufnum) * pRate, 0, frames) / frames;
-        grainPos = (ptr + TRand.ar(pJitter.neg, pJitter, trig)).wrap(0, 1);
-        grainRate = rt * TExpRand.ar(1 / (1 + rtJitter), 1 + rtJitter, trig);
-        pan = TRand.ar(pWidth.neg, pWidth, trig);
+        bufScale = BufRateScale.kr(bufnum);
 
-        grains = TGrains.ar(2, trig, bufnum, grainRate,
-            grainPos * bufDur, dur, pan, 3.0, 4);
+        // Algorithm 0: Haze (grain cloud wash)
+        haze = {
+            var trig = Dust.ar(dens);
+            var ptr = Phasor.ar(0, bufScale * pRate, 0, frames) / frames;
+            var gPos = (ptr + TRand.ar(pJitter.neg, pJitter, trig)).wrap(0, 1);
+            var gRate = rt * TExpRand.ar(1 / (1 + rtJitter), 1 + rtJitter, trig);
+            var pan = TRand.ar(pWidth.neg, pWidth, trig);
+            TGrains.ar(2, trig, bufnum, gRate, gPos * bufDur, dur, pan, 3.0, 4);
+        }.value;
 
-        filtered = RLPF.ar(grains, lpfFreq.clip(80, 18000), 0.5);
+        // Algorithm 1: Mosaic (multi-speed layers)
+        mosaic = {
+            var trig1 = Dust.ar(dens * 0.5);
+            var trig2 = Dust.ar(dens * 0.35);
+            var trig3 = Dust.ar(dens * 0.35);
+            var ptr = Phasor.ar(0, bufScale * pRate, 0, frames) / frames;
+            var gPos1 = (ptr + TRand.ar(pJitter.neg, pJitter, trig1)).wrap(0, 1);
+            var gPos2 = (ptr + TRand.ar(pJitter.neg * 1.5, pJitter * 1.5, trig2)).wrap(0, 1);
+            var gPos3 = (ptr + TRand.ar(pJitter.neg * 0.5, pJitter * 0.5, trig3)).wrap(0, 1);
+            var pan1 = TRand.ar(pWidth.neg, pWidth, trig1);
+            var pan2 = TRand.ar(pWidth.neg, pWidth, trig2);
+            var pan3 = TRand.ar(pWidth.neg, pWidth, trig3);
+            var lo = TGrains.ar(2, trig1, bufnum, rt * 0.5, gPos1 * bufDur, dur * 1.5, pan1, 2.0, 4);
+            var mid = TGrains.ar(2, trig2, bufnum, rt, gPos2 * bufDur, dur, pan2, 2.0, 4);
+            var hi = TGrains.ar(2, trig3, bufnum, rt * 2.0, gPos3 * bufDur, dur * 0.6, pan3, 1.5, 4);
+            (lo + mid + hi) * 0.55;
+        }.value;
+
+        // Algorithm 2: Tunnel (tight loop drone)
+        tunnel = {
+            var trig = Dust.ar(dens * 2);
+            var ptr = Phasor.ar(0, bufScale * pRate * 0.08, 0, frames) / frames;
+            var gPos = (ptr + TRand.ar(pJitter.neg * 0.15, pJitter * 0.15, trig)).wrap(0, 1);
+            var gRate = rt * TExpRand.ar(0.995, 1.005, trig);
+            var pan = TRand.ar(pWidth.neg * 0.4, pWidth * 0.4, trig);
+            TGrains.ar(2, trig, bufnum, gRate, gPos * bufDur, dur * 2.0, pan, 2.5, 4);
+        }.value;
+
+        // Algorithm 3: Strum (rhythmic cascades)
+        strum = {
+            var trig = Impulse.ar(dens);
+            var ptr = Phasor.ar(0, bufScale * pRate * 1.5, 0, frames) / frames;
+            var gPos = (ptr + TRand.ar(pJitter.neg * 0.3, pJitter * 0.3, trig)).wrap(0, 1);
+            var gRate = rt * TExpRand.ar(1 / (1 + (rtJitter * 0.5)), 1 + (rtJitter * 0.5), trig);
+            var pan = TRand.ar(pWidth.neg, pWidth, trig);
+            TGrains.ar(2, trig, bufnum, gRate, gPos * bufDur, dur * 0.7, pan, 3.0, 4);
+        }.value;
+
+        // Algorithm 4: Glide (pitch-shifting shimmer)
+        glide = {
+            var trig = Dust.ar(dens * 0.8);
+            var ptr = Phasor.ar(0, bufScale * pRate * 1.8, 0, frames) / frames;
+            var gPos = (ptr + TRand.ar(pJitter.neg, pJitter, trig)).wrap(0, 1);
+            var drift = SinOsc.kr(0.07 + (rtJitter * 0.3)).range(0.85, 1.18);
+            var gRate = rt * drift * TExpRand.ar(0.97, 1.03, trig);
+            var pan = TRand.ar(pWidth.neg, pWidth, trig);
+            TGrains.ar(2, trig, bufnum, gRate, gPos * bufDur, dur * 1.3, pan, 2.8, 4);
+        }.value;
+
+        grains = SelectX.ar(algoS.clip(0, 4), [
+            haze, mosaic, tunnel, strum, glide
+        ]);
+
+        filtered = RLPF.ar(grains, lpfFreq.lag(0.1).clip(80, 18000), 0.5);
         delayed = LocalIn.ar(2);
         wet = filtered + (delayed * fb);
         wet = DelayC.ar(wet, 2.0, dlTime.clip(0.001, 2.0));
@@ -158,53 +218,56 @@ s.waitForBoot({
         var src, dry, env;
         var hall, ppDelay, tapeEcho, chorus, drive, freeze;
         var wet, mid, side, sig;
+        var algoS, p1s, p2s, p3s;
 
-        src = PlayBuf.ar(1, bufnum, BufRateScale.kr(bufnum) * rt, loop: 1);
+        algoS = algo.lag(0.5);
+        p1s = p1.lag(0.1);
+        p2s = p2.lag(0.1);
+        p3s = p3.lag(0.1);
+
+        src = PlayBuf.ar(1, bufnum, BufRateScale.kr(bufnum) * rt.lag(0.2), loop: 1);
         dry = Pan2.ar(src, 0);
 
         // Algorithm 0: Hall Reverb
         hall = FreeVerb2.ar(dry[0], dry[1],
             mix: 1.0,
-            room: p1.linlin(0, 1, 0.3, 0.98),
-            damp: p2.linlin(0, 1, 0.1, 0.8)
+            room: p1s.linlin(0, 1, 0.3, 0.98),
+            damp: p2s.linlin(0, 1, 0.1, 0.8)
         );
-        hall = DelayC.ar(hall, 0.1, p3.linlin(0, 1, 0.0, 0.08));
+        hall = DelayC.ar(hall, 0.1, p3s.linlin(0, 1, 0.0, 0.08));
 
-        // Algorithm 1: Ping-Pong Delay
+        // Algorithm 1: Ping-Pong Delay (self-contained CombC, no LocalIn/LocalOut)
         ppDelay = {
-            var t = p1.linexp(0, 1, 0.05, 1.2);
-            var fb = p2.linlin(0, 1, 0.05, 0.85);
-            var ppL, ppR, ppFb;
-            ppFb = LocalIn.ar(2);
-            ppL = CombC.ar(dry[0] + (ppFb[1] * fb), 2, t, 4);
-            ppR = CombC.ar(dry[1] + (ppFb[0] * fb), 2, t * 1.07, 4);
-            LocalOut.ar([ppL, ppR]);
-            XFade2.ar(
-                [ppL, ppR],
-                [ppR, ppL],
-                p3.linlin(0, 1, -1, 1)
-            );
+            var t = p1s.linexp(0, 1, 0.05, 1.2);
+            var decayT = p2s.linlin(0, 1, 0.2, 6.0);
+            var delL = CombC.ar(dry[0], 2, t, decayT);
+            var delR = CombC.ar(dry[1], 2, t * 0.75, decayT);
+            var crossAmt = p3s.linlin(0, 1, 0.0, 0.5);
+            [
+                (delL * (1 - crossAmt)) + (delR * crossAmt),
+                (delR * (1 - crossAmt)) + (delL * crossAmt)
+            ];
         }.value;
 
         // Algorithm 2: Tape Echo
         tapeEcho = {
-            var t = p1.linexp(0, 1, 0.08, 0.8);
-            var fb = p2.linlin(0, 1, 0.1, 0.8);
+            var t = p1s.linexp(0, 1, 0.08, 0.8);
+            var decayT = p2s.linlin(0, 1, 0.5, 8.0);
             var wow = SinOsc.kr(
-                0.3 + (p3 * 2.0),
+                0.3 + (p3s * 2.0),
                 0
             ).range(0.998, 1.002);
-            var echoL = CombC.ar(dry[0], 2, t * wow, fb * 6);
-            var echoR = CombC.ar(dry[1], 2, t * 1.05 * wow, fb * 6);
+            var echoL = CombC.ar(dry[0], 2, t * wow, decayT);
+            var echoR = CombC.ar(dry[1], 2, t * 1.05 * wow, decayT);
             var filtered = LPF.ar([echoL, echoR], 4000);
             (dry * 0.3) + (filtered * 0.7);
         }.value;
 
         // Algorithm 3: Chorus
         chorus = {
-            var cRate = p1.linexp(0, 1, 0.1, 6);
-            var depth = p2.linlin(0, 1, 0.001, 0.015);
-            var fb = p3.linlin(0, 1, 0.0, 0.4);
+            var cRate = p1s.linexp(0, 1, 0.1, 6);
+            var depth = p2s.linlin(0, 1, 0.001, 0.015);
+            var fb = p3s.linlin(0, 1, 0.0, 0.4);
             var d1 = SinOsc.kr(cRate, 0).range(0.015 - depth, 0.015 + depth);
             var d2 = SinOsc.kr(cRate * 0.93, pi).range(0.018 - depth, 0.018 + depth);
             var cL = DelayC.ar(dry[0] + (DelayC.ar(dry[0], 0.05, d1) * fb), 0.05, d1);
@@ -214,9 +277,9 @@ s.waitForBoot({
 
         // Algorithm 4: Overdrive
         drive = {
-            var gain = p1.linexp(0, 1, 1.0, 20.0);
-            var tone = p2.linexp(0, 1, 800, 12000);
-            var asym = p3.linlin(0, 1, 0.0, 0.3);
+            var gain = p1s.linexp(0, 1, 1.0, 20.0);
+            var tone = p2s.linexp(0, 1, 800, 12000);
+            var asym = p3s.linlin(0, 1, 0.0, 0.3);
             var driven = ((dry * gain) + asym).tanh;
             LPF.ar(driven, tone);
         }.value;
@@ -224,21 +287,21 @@ s.waitForBoot({
         // Algorithm 5: Freezer
         freeze = {
             var chainL, chainR;
-            var thr = p1;
+            var thr = p1s;
             chainL = FFT(fftBufL, dry[0]);
             chainR = FFT(fftBufR, dry[1]);
             chainL = PV_MagFreeze(chainL, thr > 0.5);
             chainR = PV_MagFreeze(chainR, thr > 0.5);
-            chainL = PV_MagSmear(chainL, p3.linlin(0, 1, 0, 12).round);
-            chainR = PV_MagSmear(chainR, p3.linlin(0, 1, 0, 12).round);
+            chainL = PV_MagSmear(chainL, p3s.linlin(0, 1, 0, 12).round);
+            chainR = PV_MagSmear(chainR, p3s.linlin(0, 1, 0, 12).round);
             [IFFT(chainL), IFFT(chainR)];
         }.value;
 
-        wet = SelectX.ar(algo.clip(0, 5), [
+        wet = SelectX.ar(algoS.clip(0, 5), [
             hall, ppDelay, tapeEcho, chorus, drive, freeze
         ]);
 
-        wet = XFade2.ar(dry, wet, (mix * 2 - 1).clip(-1, 1));
+        wet = XFade2.ar(dry, wet, (mix.lag(0.2) * 2 - 1).clip(-1, 1));
 
         mid = (wet[0] + wet[1]) * 0.5;
         side = (wet[0] - wet[1]) * 0.5;

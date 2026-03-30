@@ -1,62 +1,68 @@
 # Granular Sampling Module -- Technical Reference
 
-Microcosm-inspired granular processor for the garden audio pipeline.
-Transforms field recordings and synthetic textures into ethereal,
-atmospheric soundscapes shaped by daily camera data.
+Multi-algorithm granular processor for the garden audio pipeline
+(design inspired by Hologram Microcosm). Transforms field recordings
+and synthetic textures into ethereal, atmospheric soundscapes shaped
+by daily camera data.
+
+Five grain algorithms -- Haze, Mosaic, Tunnel, Strum, Glide -- are
+selectable via a continuous `algo` parameter and crossfaded with
+`SelectX.ar`. All algorithms share the same post-processing chain
+(RLPF, delay/feedback, FreeVerb2, dry/wet blend).
 
 ---
 
-## Processing Chain
+## Signal Flow
 
 ```
-                        LAYER 1                    LAYER 2                   LAYER 3
-                     Grain Engine              Tone + Smear                  Space
-                                                                                          
- Source WAV -----> [b_allocReadChannel] -----> mono buffer                                
-  (stereo)           channel 0 only                |                                      
-                                                   v                                      
-                  Phasor (slow file scan)                                                  
-                         |                                                                
-                         v                                                                
-                  + TRand posJitter                                                       
-                         |                                                                
-                         v                                                                
-                      TGrains  <--- Dust.ar (density)                                     
-                    (rate, dur,     TExpRand (rateJitter)                                  
-                     pan, amp)      TRand (panWidth)                                      
-                         |                                                                
-                         v                                                                
-                       RLPF  (lpfFreq, rq=0.5) ----+---- dryPath (filtered grains)       
-                         |                          |                                     
-                         v                          |                                     
-                  LocalIn feedback  -----+          |                                     
-                         |               |          |                                     
-                         v               |          |                                     
-                  DelayC (dlTime)        |          |                                     
-                         |               |          |                                     
-                  LocalOut --------------+          |                                     
-                         |                          |                                     
-                         v                          |                                     
-                  XFade2 (dlMix)                    |                                     
-                  filtered <-> delayed              |                                     
-                         |                          |                                     
-                         v                          |                                     
-                  FreeVerb2                         |                                     
-                  (room 0.85, damp 0.5)             |                                     
-                         |                          |                                     
-                         v                          v                                     
-                      wetPath                    dryPath                                  
-                         |                          |                                     
-                         +------ dryMix blend ------+                                     
-                                     |                                                    
-                                     v                                                    
-                              EnvGen (ASR)                                                
-                                     |                                                    
-                                     v                                                    
-                              Limiter (0.95)                                              
-                                     |                                                    
-                                     v                                                    
-                                  Out.ar                                                  
+  Source WAV -----> [b_allocReadChannel] -----> mono buffer
+   (stereo)           channel 0 only                |
+                                                    v
+                  +-----------------------------------------------+
+                  |        Grain Engine Bank (SelectX on algo)     |
+                  |                                               |
+                  |  0: Haze    -- Dust triggers, slow scan       |
+                  |  1: Mosaic  -- 3 TGrains at 0.5x/1x/2x       |
+                  |  2: Tunnel  -- tight loop, doubled density     |
+                  |  3: Strum   -- Impulse triggers, rhythmic      |
+                  |  4: Glide   -- LFO pitch drift, fast scan     |
+                  +-----------------------------------------------+
+                                       |
+                              SelectX.ar(algo)
+                                       |
+                                       v
+               +---------------------------------------------------+
+               |          Shared Post-Processing (unchanged)        |
+               |                                                   |
+               |   RLPF (lpfFreq, rq=0.5)                         |
+               |       |                                           |
+               |       v                                           |
+               |   LocalIn feedback -----+                         |
+               |       |                 |                         |
+               |       v                 |                         |
+               |   DelayC (dlTime)      |                         |
+               |       |                 |                         |
+               |   LocalOut  -----------+                         |
+               |       |                                           |
+               |       v                                           |
+               |   XFade2 (dlMix)  filtered <-> delayed            |
+               |       |                                           |
+               |       v                                           |
+               |   FreeVerb2 (room 0.85, damp 0.5, vbMix)         |
+               |       |                                           |
+               |       v               v                           |
+               |    wetPath         dryPath (filtered grains)      |
+               |       +--- dryMix blend ---+                      |
+               |                |                                  |
+               |                v                                  |
+               |         EnvGen (ASR)                              |
+               |                |                                  |
+               |                v                                  |
+               |         Limiter (0.95)                            |
+               |                |                                  |
+               |                v                                  |
+               |             Out.ar                                |
+               +---------------------------------------------------+
 ```
 
 ---
@@ -66,73 +72,148 @@ atmospheric soundscapes shaped by daily camera data.
 | Item | Path |
 |------|------|
 | SynthDef + NRT score | `supercollider/granular_sampling.scd` |
+| Real-time SynthDef | `supercollider/explorer_server.scd` (`\gardenMicrocosm`) |
 | Parameter mapping | `garden_audio/config_generator.py` (`_granular_sampling_config`) |
+| Module defs (GUI) | `exploration/module_defs.py` (`GRANULAR_ALGO_INFO`) |
 | Source audio | `audio_batches/granular_sampling/*.wav` (permanent, reused daily) |
 | Daily config | `module_configs/YYYY-MM-DD/granular_sampling.json` |
 | Output render | `renders/YYYY-MM-DD/granular_sampling.aiff` |
 
 ---
 
+## The 5 Grain Algorithms
+
+All algorithms use `TGrains` with `Phasor`-based position scanning and share
+the same parameter set. They differ in trigger pattern, position strategy,
+playback rate behavior, and grain duration scaling.
+
+### 0 -- Haze (original behavior)
+
+Ethereal wash of overlapping grains. `Dust.ar` triggers produce stochastic,
+non-rhythmic grain onsets. `Phasor` scans slowly through the buffer with
+random position jitter. Pitch varies symmetrically on a logarithmic scale
+via `TExpRand`.
+
+| Key behavior | Detail |
+|-------------|--------|
+| Trigger | `Dust.ar(dens)` -- random |
+| Scan rate | `pRate` (slow) |
+| Position jitter | full `pJitter` range |
+| Pitch | `rt * TExpRand(1/(1+rtJitter), 1+rtJitter)` |
+| Grain duration | `dur` (unmodified) |
+
+### 1 -- Mosaic (multi-speed layers)
+
+Three `TGrains` voices at 0.5x, 1x, and 2x playback rate layered together.
+Creates overlapping speed textures where the same source material is heard at
+different time scales simultaneously.
+
+| Key behavior | Detail |
+|-------------|--------|
+| Voices | 3 independent trigger streams |
+| Rates | `rt * 0.5`, `rt`, `rt * 2.0` |
+| Duration scaling | 1.5x (low), 1x (mid), 0.6x (high) |
+| Amplitude balance | 2.0 + 2.0 + 1.5, mixed at 0.55x |
+| Position jitter | varied per voice (1x, 1.5x, 0.5x of pJitter) |
+
+### 2 -- Tunnel (tight loop drone)
+
+Very narrow scanning window with doubled density and minimal jitter.
+Generates sustained, hypnotic drones by looping tiny portions of the source.
+Near-unity pitch variation keeps the tone stable.
+
+| Key behavior | Detail |
+|-------------|--------|
+| Trigger | `Dust.ar(dens * 2)` -- doubled density |
+| Scan rate | `pRate * 0.08` -- nearly stationary |
+| Position jitter | `pJitter * 0.15` -- minimal |
+| Pitch jitter | 0.5% deviation (0.995 to 1.005) |
+| Grain duration | `dur * 2.0` -- long, overlapping grains |
+| Pan width | `pWidth * 0.4` -- narrow stereo |
+
+### 3 -- Strum (rhythmic cascades)
+
+`Impulse.ar` replaces `Dust.ar` for regular, even triggering. Creates
+pointillistic rhythmic textures like cascading plucked strings. Faster
+scan rate ensures the position progresses noticeably between triggers.
+
+| Key behavior | Detail |
+|-------------|--------|
+| Trigger | `Impulse.ar(dens)` -- regular, rhythmic |
+| Scan rate | `pRate * 1.5` -- faster progression |
+| Position jitter | `pJitter * 0.3` -- tight grouping |
+| Pitch jitter | reduced to `rtJitter * 0.5` |
+| Grain duration | `dur * 0.7` -- shorter, more articulate |
+
+### 4 -- Glide (pitch-shifting shimmer)
+
+Grains with slow continuous pitch drift via `SinOsc.kr` LFO modulating rate.
+Position scans faster than Haze. Creates shimmering, pitch-shifting textures
+reminiscent of tape-speed modulation.
+
+| Key behavior | Detail |
+|-------------|--------|
+| Trigger | `Dust.ar(dens * 0.8)` |
+| Scan rate | `pRate * 1.8` -- fast exploration |
+| Pitch drift | `SinOsc.kr(0.07 + rtJitter*0.3).range(0.85, 1.18)` |
+| Additional jitter | `TExpRand(0.97, 1.03)` per grain |
+| Grain duration | `dur * 1.3` -- slightly longer |
+
+---
+
 ## SynthDef: `\gardenMicrocosm`
 
-### Layer 1 -- Grain Engine
+### Parameters
 
-| UGen | Role | Controls |
-|------|------|----------|
-| `Phasor.ar` | Slow steady scan through the buffer | `pRate` (scan speed) |
-| `TRand.ar` | Per-grain position jitter around the pointer | `pJitter` |
-| `Dust.ar` | Stochastic grain trigger stream | `dens` |
-| `TExpRand.ar` | Per-grain pitch variation (exponential, more musical than linear) | `rtJitter` |
-| `TGrains.ar` | Grain playback with 2-channel output, 4-point interpolation | `dur`, `rt`, `pWidth` |
+| SC arg | JSON key | Range | Default | Role |
+|--------|----------|-------|---------|------|
+| `algo` | `algo` | 0.0 -- 4.0 | 0.0 | Grain algorithm selection (crossfaded) |
+| `dens` | `grain_density` | 4 -- 80 Hz | 20 | Grain trigger rate |
+| `dur` | `grain_duration` | 0.02 -- 0.5 s | 0.12 | Base grain length |
+| `pRate` | `pos_rate` | 0.001 -- 0.05 | 0.008 | Phasor scan speed |
+| `pJitter` | `pos_jitter` | 0.0 -- 0.3 | 0.05 | Position randomization |
+| `rt` | `rate` | 0.3 -- 2.0 | 0.85 | Base playback rate |
+| `rtJitter` | `rate_jitter` | 0.0 -- 0.5 | 0.1 | Pitch variation depth |
+| `pWidth` | `pan_width` | 0.0 -- 1.0 | 0.8 | Stereo scatter width |
+| `lpfFreq` | `lpf` | 500 -- 18000 Hz | 6000 | Resonant LPF cutoff |
+| `dlMix` | `delay_mix` | 0.0 -- 1.0 | 0.35 | Dry/delay crossfade |
+| `dlTime` | `delay_time` | 0.01 -- 1.0 s | 0.33 | Delay line length |
+| `fb` | `feedback` | 0.0 -- 0.7 | 0.4 | Delay feedback gain |
+| `vbMix` | `reverb_mix` | 0.0 -- 1.0 | 0.4 | Reverb wet/dry mix |
+| `drMix` | `dry_mix` | 0.0 -- 1.0 | 0.2 | Dry grain presence in final output |
 
-`TGrains` reads from a **mono** buffer (channel 0 extracted via `b_allocReadChannel`).
-The `Phasor` wraps continuously through the file at a rate controlled by `pRate`.
-Each grain's position is the pointer plus a random offset in `[-pJitter, +pJitter]`,
-wrapped to `[0, 1]` and scaled to buffer duration in seconds.
+### Algorithm Selection
 
-Grain pitch is `rt * TExpRand(1/(1+rtJitter), 1+rtJitter)`, which preserves the
-center pitch while scattering symmetrically on a logarithmic scale.
+`SelectX.ar(algo.clip(0, 4), [...])` crossfades smoothly between adjacent
+algorithms. The `algo` parameter is lagged (0.5s in real-time mode) to
+prevent clicks during transitions. Integer values select pure algorithms;
+intermediate values blend neighbors:
 
-### Layer 2 -- Tone + Smear
+- `algo = 0.0` -- pure Haze
+- `algo = 0.5` -- 50% Haze + 50% Mosaic
+- `algo = 1.0` -- pure Mosaic
+- `algo = 2.5` -- 50% Tunnel + 50% Strum
+- `algo = 4.0` -- pure Glide
 
-| UGen | Role | Controls |
-|------|------|----------|
-| `RLPF.ar` | Resonant low-pass filter, softens high end | `lpfFreq` (cutoff), rq fixed at 0.5 |
-| `LocalIn`/`LocalOut` | Single-block feedback loop | (internal) |
-| `DelayC.ar` | Delay line inside the feedback loop | `dlTime` |
-| `XFade2.ar` | Crossfade between filtered signal and delayed signal | `dlMix` |
+### Post-Processing Chain (shared by all algorithms)
 
-The feedback loop creates temporal smearing: grains echo and blur into
-each other. `fb` (feedback gain) controls how much of the delayed signal
-recirculates. The `XFade2` blends from pure filtered grains (`dlMix=0`)
-to fully delayed/smeared (`dlMix=1`).
-
-### Layer 3 -- Space
-
-| UGen | Role | Controls |
-|------|------|----------|
-| `FreeVerb2.ar` | Stereo reverb, room 0.85, damp 0.5 | `vbMix` (wet/dry) |
-
-Room size and damping are fixed at values that always produce a lush,
-spacious reverb. Only the wet/dry mix varies with camera data.
-
-### Output Stage
-
-| UGen | Role | Controls |
-|------|------|----------|
-| dry/wet blend | `(filtered * drMix) + (wet * (1 - drMix))` | `drMix` |
-| `EnvGen.kr` | ASR envelope over the full render duration | `attack`, `sustain`, `release` |
-| `Limiter.ar` | Brickwall limiter at 0.95 to prevent clipping from feedback buildup | (fixed) |
+| Stage | UGen | Controls |
+|-------|------|----------|
+| Tone shaping | `RLPF.ar` (rq=0.5) | `lpfFreq` |
+| Delay smear | `LocalIn`/`LocalOut` + `DelayC.ar` | `dlTime`, `fb` |
+| Delay mix | `XFade2.ar` | `dlMix` |
+| Reverb | `FreeVerb2.ar` (room=0.85, damp=0.5) | `vbMix` |
+| Dry blend | `(filtered * drMix) + (wet * (1 - drMix))` | `drMix` |
+| Envelope | `EnvGen.kr` (ASR) | `attack`, `sustain`, `release` |
+| Limiter | `Limiter.ar` at 0.95 | (fixed) |
 
 ---
 
 ## Preset Blending System
 
-Instead of mapping each parameter independently, the module uses **4 curated
-presets** placed on an activity continuum. Camera data computes a single
-composite activity score, and the two nearest presets are smoothly
-interpolated. Every preset is hand-tuned to sound beautiful on its own,
-so every blend point is also beautiful.
+Five curated presets are placed on an activity continuum `[0, 1]`. Each
+preset is tuned for a different grain algorithm. Camera data computes a
+composite activity score to select the blend position.
 
 ### Activity Score
 
@@ -140,24 +221,24 @@ so every blend point is also beautiful.
 activity = 0.5 * change_score_mean + 0.3 * brightness_mean + 0.2 * ndvi_mean
 ```
 
-All three features are in `[0, 1]` from the dataset. The weighted sum stays
-in `[0, 1]` and represents overall garden activity for the day.
-
-### The 4 Presets
+### The 5 Presets
 
 ```
-  0.0          0.33          0.67          1.0
-   |-------------|-------------|-------------|
- deep_haze    warm_drift      cloud       shimmer
+  0.0        0.25         0.50         0.75         1.0
+   |-----------|-----------|-----------|-----------|
+ deep_haze  warm_mosaic  drone_tunnel  rhythmic_  shimmer_
+  (Haze)    (Mosaic)     (Tunnel)      strum      glide
+                                       (Strum)    (Glide)
 ```
 
-#### deep_haze (position 0.0) -- calm, dim day
+#### deep_haze (position 0.0, algo=0) -- sparse, calm garden
 
 Slowest scan, darkest filter, longest grains, maximum smear.
 The garden was still; the sound is a deep, slow-moving fog.
 
 | Parameter | Value |
 |-----------|-------|
+| algo | 0.0 (Haze) |
 | grain_density | 12 Hz |
 | grain_duration | 0.25 s |
 | pos_rate | 0.003 |
@@ -172,131 +253,123 @@ The garden was still; the sound is a deep, slow-moving fog.
 | reverb_mix | 0.5 |
 | dry_mix | 0.15 |
 
-#### warm_drift (position 0.33) -- gentle movement
+#### warm_mosaic (position 0.25, algo=1) -- gentle activity
 
-Moderate pace, warm filter, balanced effects. Light activity in
-the garden; the sound is a slow, warm current with soft grain edges.
+Multi-speed layering with warm filtering. Light garden activity;
+the sound is a layered, shifting tapestry of overlapping time scales.
 
 | Parameter | Value |
 |-----------|-------|
-| grain_density | 20 Hz |
-| grain_duration | 0.18 s |
-| pos_rate | 0.008 |
-| pos_jitter | 0.05 |
+| algo | 1.0 (Mosaic) |
+| grain_density | 18 Hz |
+| grain_duration | 0.2 s |
+| pos_rate | 0.006 |
+| pos_jitter | 0.06 |
 | rate | 0.85x |
 | rate_jitter | 0.1 |
+| pan_width | 0.85 |
+| lpf | 5500 Hz |
+| delay_mix | 0.38 |
+| delay_time | 0.35 s |
+| feedback | 0.42 |
+| reverb_mix | 0.45 |
+| dry_mix | 0.2 |
+
+#### drone_tunnel (position 0.50, algo=2) -- moderate garden
+
+Tight loop drone with deep reverb. Moderate garden activity;
+the sound is a sustained, hypnotic tone hovering in space.
+
+| Parameter | Value |
+|-----------|-------|
+| algo | 2.0 (Tunnel) |
+| grain_density | 30 Hz |
+| grain_duration | 0.18 s |
+| pos_rate | 0.004 |
+| pos_jitter | 0.015 |
+| rate | 0.8x |
+| rate_jitter | 0.02 |
+| pan_width | 0.5 |
+| lpf | 4500 Hz |
+| delay_mix | 0.45 |
+| delay_time | 0.4 s |
+| feedback | 0.48 |
+| reverb_mix | 0.52 |
+| dry_mix | 0.12 |
+
+#### rhythmic_strum (position 0.75, algo=3) -- active garden
+
+Rhythmic cascading grains, brighter filter, more dry presence.
+An active garden day; the sound has pulsing, articulate texture.
+
+| Parameter | Value |
+|-----------|-------|
+| algo | 3.0 (Strum) |
+| grain_density | 15 Hz |
+| grain_duration | 0.1 s |
+| pos_rate | 0.012 |
+| pos_jitter | 0.04 |
+| rate | 1.0x |
+| rate_jitter | 0.08 |
 | pan_width | 0.8 |
-| lpf | 6000 Hz |
-| delay_mix | 0.35 |
-| delay_time | 0.33 s |
-| feedback | 0.4 |
-| reverb_mix | 0.4 |
-| dry_mix | 0.25 |
+| lpf | 8000 Hz |
+| delay_mix | 0.3 |
+| delay_time | 0.25 s |
+| feedback | 0.35 |
+| reverb_mix | 0.35 |
+| dry_mix | 0.3 |
 
-#### cloud (position 0.67) -- busy garden, still ethereal
+#### shimmer_glide (position 1.0, algo=4) -- lush, vibrant garden
 
-Dense grain shower, wide stereo, heavy reverb, medium-slow scan.
-Lots happening in the garden; the sound is a thick, enveloping cloud.
-
-| Parameter | Value |
-|-----------|-------|
-| grain_density | 42 Hz |
-| grain_duration | 0.14 s |
-| pos_rate | 0.006 |
-| pos_jitter | 0.1 |
-| rate | 0.9x |
-| rate_jitter | 0.2 |
-| pan_width | 0.9 |
-| lpf | 7000 Hz |
-| delay_mix | 0.4 |
-| delay_time | 0.38 s |
-| feedback | 0.45 |
-| reverb_mix | 0.48 |
-| dry_mix | 0.18 |
-
-#### shimmer (position 1.0) -- active, bright day
-
-Fastest scan, brightest filter, shortest grains, more dry presence.
-A vivid, sunlit garden day; the sound sparkles and breathes.
+Pitch-shifting grains with sparkling texture, most dry signal.
+A lush, sunlit garden; the sound shimmers and breathes.
 
 | Parameter | Value |
 |-----------|-------|
-| grain_density | 35 Hz |
-| grain_duration | 0.09 s |
-| pos_rate | 0.022 |
-| pos_jitter | 0.08 |
-| rate | 1.1x |
-| rate_jitter | 0.18 |
-| pan_width | 0.7 |
+| algo | 4.0 (Glide) |
+| grain_density | 25 Hz |
+| grain_duration | 0.15 s |
+| pos_rate | 0.015 |
+| pos_jitter | 0.07 |
+| rate | 1.05x |
+| rate_jitter | 0.15 |
+| pan_width | 0.75 |
 | lpf | 10000 Hz |
-| delay_mix | 0.25 |
+| delay_mix | 0.28 |
 | delay_time | 0.22 s |
 | feedback | 0.3 |
-| reverb_mix | 0.3 |
-| dry_mix | 0.35 |
+| reverb_mix | 0.32 |
+| dry_mix | 0.32 |
 
 ### Blending Logic
 
 For a given activity score, the system finds the two nearest presets and
-linearly interpolates every parameter between them. For example:
+linearly interpolates every parameter (including `algo`) between them:
 
-- activity = 0.0 gives pure **deep_haze**
-- activity = 0.16 gives 50% deep_haze + 50% warm_drift
-- activity = 0.33 gives pure **warm_drift**
-- activity = 0.50 gives 50% warm_drift + 50% cloud
-- activity = 1.0 gives pure **shimmer**
+- activity = 0.0 gives pure **deep_haze** (algo 0, Haze)
+- activity = 0.125 gives 50% deep_haze + 50% warm_mosaic (algo ~0.5, Haze > Mosaic)
+- activity = 0.25 gives pure **warm_mosaic** (algo 1, Mosaic)
+- activity = 0.375 gives 50% warm_mosaic + 50% drone_tunnel (algo ~1.5, Mosaic > Tunnel)
+- activity = 0.50 gives pure **drone_tunnel** (algo 2, Tunnel)
+- activity = 0.75 gives pure **rhythmic_strum** (algo 3, Strum)
+- activity = 1.0 gives pure **shimmer_glide** (algo 4, Glide)
+
+Because `algo` is included in the preset parameters, the grain algorithm
+changes smoothly along the activity continuum. `SelectX.ar` handles the
+crossfade between adjacent algorithms in the DSP engine.
 
 ### Design Guarantees
 
-Because every preset is hand-tuned and the interpolation is linear between
-adjacent presets, every possible output is guaranteed to be:
+Every preset is hand-tuned and interpolation is linear between adjacent
+presets, so every possible output is guaranteed to be:
 
-- **Lush** -- reverb mix ranges from 0.3 (shimmer) to 0.5 (deep_haze)
-- **Smeared** -- delay mix ranges from 0.25 to 0.5, feedback from 0.3 to 0.5
-- **Textured** -- grain density from 12 to 42, duration from 0.09 to 0.25 s
-- **Present** -- dry mix from 0.15 to 0.35, original grain character always audible
-- **Smooth** -- LPF from 3800 to 10000 Hz, always softening the high end
+- **Lush** -- reverb mix 0.32 to 0.52, always spacious
+- **Smeared** -- delay mix 0.28 to 0.5, feedback 0.3 to 0.5
+- **Textured** -- algorithm-specific grain patterns across the continuum
+- **Present** -- dry mix 0.12 to 0.32, original character always audible
+- **Smooth** -- LPF 3800 to 10000 Hz, high end always softened
 
 No combination of camera data can produce harsh, empty, or ugly results.
-
----
-
-## Example Config (2026-03-25, 282 events)
-
-```json
-{
-  "preset_blend": {
-    "activity_score": 0.1345,
-    "preset_lo": "deep_haze",
-    "preset_hi": "warm_drift",
-    "blend_t": 0.4075
-  },
-  "params": {
-    "grain_density": 15.26,
-    "grain_duration": 0.2215,
-    "pos_rate": 0.005,
-    "pos_jitter": 0.0322,
-    "rate": 0.7611,
-    "rate_jitter": 0.0704,
-    "pan_width": 0.8592,
-    "lpf": 4696.6,
-    "delay_mix": 0.4389,
-    "delay_time": 0.4011,
-    "feedback": 0.4592,
-    "reverb_mix": 0.4592,
-    "dry_mix": 0.1908,
-    "amp_attack": 0.2215,
-    "amp_decay": 0.6592
-  }
-}
-```
-
-Interpretation: activity score 0.13 places this day 41% of the way from
-**deep_haze** toward **warm_drift**. The garden was calm with dim light
-(brightness ~0.19, change_score ~0.06, NDVI ~0.31). The result is close to
-deep_haze but slightly warmer: slow-scanning (0.005), dark-filtered
-(4.7 kHz), pitch-lowered (0.76x), heavy smear (delay 0.44, feedback 0.46),
-and deep reverb (0.46). Dry mix at 0.19 preserves a hint of grain clarity.
 
 ---
 
@@ -318,6 +391,9 @@ operates within a single SynthDef graph (per-block feedback, not inter-synth).
 ## Ancestry
 
 Inspired by the Hologram Microcosm pedal's approach to granular processing:
-TGrains for grain generation, Phasor for file scanning, feedback delay for
-temporal diffusion, and reverb as part of the texture (not just an end effect).
+the Haze algorithm captures the original ethereal grain cloud; Mosaic creates
+multi-rate layers (similar to Microcosm's multi-speed looper); Tunnel produces
+dense drones from small buffer segments; Strum delivers rhythmic cascades; and
+Glide adds pitch-shifting shimmer. The shared post-processing chain (RLPF,
+delay feedback, FreeVerb2) provides the "always beautiful" guarantee.
 Adapted for offline NRT rendering driven by environmental camera data.

@@ -79,32 +79,29 @@ if(audioFiles.size == 0, {
         );
         hall = DelayC.ar(hall, 0.1, p3.linlin(0, 1, 0.0, 0.08));
 
-        // -- Algorithm 1: Ping-Pong Delay --
+        // -- Algorithm 1: Ping-Pong Delay (self-contained CombC) --
         ppDelay = {
             var t = p1.linexp(0, 1, 0.05, 1.2);
-            var fb = p2.linlin(0, 1, 0.05, 0.85);
-            var ppL, ppR, ppFb;
-            ppFb = LocalIn.ar(2);
-            ppL = CombC.ar(dry[0] + (ppFb[1] * fb), 2, t, 4);
-            ppR = CombC.ar(dry[1] + (ppFb[0] * fb), 2, t * 1.07, 4);
-            LocalOut.ar([ppL, ppR]);
-            XFade2.ar(
-                [ppL, ppR],
-                [ppR, ppL],
-                p3.linlin(0, 1, -1, 1)
-            );
+            var decayT = p2.linlin(0, 1, 0.2, 6.0);
+            var delL = CombC.ar(dry[0], 2, t, decayT);
+            var delR = CombC.ar(dry[1], 2, t * 0.75, decayT);
+            var crossAmt = p3.linlin(0, 1, 0.0, 0.5);
+            [
+                (delL * (1 - crossAmt)) + (delR * crossAmt),
+                (delR * (1 - crossAmt)) + (delL * crossAmt)
+            ];
         }.value;
 
         // -- Algorithm 2: Tape Echo --
         tapeEcho = {
             var t = p1.linexp(0, 1, 0.08, 0.8);
-            var fb = p2.linlin(0, 1, 0.1, 0.8);
+            var decayT = p2.linlin(0, 1, 0.5, 8.0);
             var wow = SinOsc.kr(
                 0.3 + (p3 * 2.0),
                 0
             ).range(0.998, 1.002);
-            var echoL = CombC.ar(dry[0], 2, t * wow, fb * 6);
-            var echoR = CombC.ar(dry[1], 2, t * 1.05 * wow, fb * 6);
+            var echoL = CombC.ar(dry[0], 2, t * wow, decayT);
+            var echoR = CombC.ar(dry[1], 2, t * 1.05 * wow, decayT);
             var filtered = LPF.ar([echoL, echoR], 4000);
             (dry * 0.3) + (filtered * 0.7);
         }.value;

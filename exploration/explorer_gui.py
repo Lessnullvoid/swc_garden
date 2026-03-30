@@ -36,7 +36,9 @@ from PyQt5.QtWidgets import (
 )
 
 from exploration import ml_engine, preset_library
-from exploration.module_defs import MODULES, get_module_names, get_param_defs
+from exploration.module_defs import (MODULES, get_module_names,
+                                    get_multifx_algo_info,
+                                    get_granular_algo_info, get_param_defs)
 from exploration.sc_bridge import SCBridge
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -380,6 +382,16 @@ class ExplorerWindow(QMainWindow):
                 item.widget().deleteLater()
 
         self._sliders.clear()
+        self._algo_label = None
+
+        if module in ("advanced_effects", "granular_sampling"):
+            self._algo_label = QLabel("")
+            self._algo_label.setStyleSheet(
+                "font-weight: bold; color: #6ca; padding: 2px 4px;"
+                "background: #222; border-radius: 3px;"
+            )
+            self.params_layout.addWidget(self._algo_label)
+
         for pdef in get_param_defs(module):
             slider = ParamSlider(pdef, self._on_param_change)
             self._sliders[pdef["name"]] = slider
@@ -387,11 +399,38 @@ class ExplorerWindow(QMainWindow):
 
         self.params_layout.addStretch()
 
+        if module in ("advanced_effects", "granular_sampling"):
+            self._update_macro_labels(0.0)
+
     # -- Parameter change callback -------------------------------------------
 
     def _on_param_change(self, pdef: dict, value: float) -> None:
         if self._playing and self.bridge.is_running:
             self.bridge.set_param(pdef["sc_arg"], value)
+
+        if (self._current_module in ("advanced_effects", "granular_sampling")
+                and pdef["name"] == "algo"):
+            self._update_macro_labels(value)
+
+    def _update_macro_labels(self, algo_value: float) -> None:
+        """Update the algo label to reflect the current algorithm."""
+        if self._current_module == "advanced_effects":
+            info = get_multifx_algo_info(algo_value)
+            if self._algo_label is not None:
+                self._algo_label.setText(f"Algorithm: {info['name']}")
+            macro_map = {"param1": info["p1"], "param2": info["p2"],
+                         "param3": info["p3"]}
+            for pname, description in macro_map.items():
+                slider = self._sliders.get(pname)
+                if slider:
+                    slider.label.setText(f"P{pname[-1]}: {description}")
+
+        elif self._current_module == "granular_sampling":
+            info = get_granular_algo_info(algo_value)
+            if self._algo_label is not None:
+                self._algo_label.setText(
+                    f"Algorithm: {info['name']}  --  {info['desc']}"
+                )
 
     # -- Transport controls ---------------------------------------------------
 
@@ -619,6 +658,10 @@ class ExplorerWindow(QMainWindow):
                 slider.set_value(val)
                 if self._playing and self.bridge.is_running:
                     self.bridge.set_param(slider.pdef["sc_arg"], val)
+
+        if (self._current_module == "advanced_effects"
+                and "algo" in params):
+            self._update_macro_labels(params["algo"])
 
     # -- ML Proposals ---------------------------------------------------------
 
