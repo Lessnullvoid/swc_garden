@@ -643,6 +643,13 @@ def _try_user_preset(module: str, dataset: dict, date_str: str,
     log.info("  %s: using user preset '%s' (dist=%.4f)",
              module, best_preset.get("name", "?"), best_dist)
 
+    params = dict(best_preset.get("params", {}))
+
+    if module == "granular_sampling" and "algo" not in params:
+        params["algo"] = 0.0
+    if module == "advanced_effects" and "algo" not in params:
+        params["algo"] = 0.0
+
     return {
         "date": date_str,
         "module": module,
@@ -653,7 +660,7 @@ def _try_user_preset(module: str, dataset: dict, date_str: str,
             "name": best_preset.get("name", ""),
             "distance": round(best_dist, 4),
         },
-        "params": best_preset.get("params", {}),
+        "params": params,
     }
 
 

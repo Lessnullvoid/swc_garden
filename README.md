@@ -153,7 +153,7 @@ https://www.alliedvision.com/en/support/software-downloads/vimba-x-sdk/vimba-x
 **Python environment** (Python 3.9+ or 3.14):
 
 ```bash
-cd /Users/swc/Desktop/SWC/software
+cd /Users/microhm/Desktop/01_Proyectos/SWC/software
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt

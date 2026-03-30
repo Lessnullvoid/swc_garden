@@ -21,7 +21,7 @@ audioBatchDir = config["audio_batch_dir"];
 outputDir = config["output_dir"];
 duration = config["duration"].asFloat;
 
-algo = params["algo"].asFloat;
+algo = if(params["algo"].notNil, { params["algo"].asFloat }, { 0.0 });
 grainDensity = params["grain_density"].asFloat;
 grainDuration = params["grain_duration"].asFloat;
 posRate = params["pos_rate"].asFloat;

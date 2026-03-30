@@ -286,7 +286,7 @@ After all four modules render, the pipeline applies LUFS-based mastering
 ### 1. Set up the Mac
 
 ```bash
-cd /Users/swc/Desktop/SWC/software
+cd /Users/microhm/Desktop/01_Proyectos/SWC/software
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt

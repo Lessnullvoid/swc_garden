@@ -20,12 +20,12 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/swc/Desktop/SWC/software/venv/bin/python</string>
+        <string>/Users/microhm/Desktop/01_Proyectos/SWC/software/venv/bin/python</string>
         <string>process_incoming.py</string>
     </array>
 
     <key>WorkingDirectory</key>
-    <string>/Users/swc/Desktop/SWC/software</string>
+    <string>/Users/microhm/Desktop/01_Proyectos/SWC/software</string>
 
     <key>StartInterval</key>
     <integer>900</integer>
@@ -34,10 +34,10 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/Users/swc/Desktop/SWC/software/daily_datasets/process_incoming_stdout.log</string>
+    <string>/Users/microhm/Desktop/01_Proyectos/SWC/software/daily_datasets/process_incoming_stdout.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/swc/Desktop/SWC/software/daily_datasets/process_incoming_stderr.log</string>
+    <string>/Users/microhm/Desktop/01_Proyectos/SWC/software/daily_datasets/process_incoming_stderr.log</string>
 
     <key>EnvironmentVariables</key>
     <dict>

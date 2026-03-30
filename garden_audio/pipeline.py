@@ -119,7 +119,7 @@ def run(date_str: str) -> None:
             cmd,
             capture_output=True,
             text=True,
-            timeout=1800,
+            timeout=3600,
         )
         log.info("sclang stdout:\n%s", result.stdout)
         if result.stderr:
@@ -131,7 +131,7 @@ def run(date_str: str) -> None:
     except FileNotFoundError:
         log.error("sclang not found at '%s'. Install SuperCollider or set path.", sclang)
     except subprocess.TimeoutExpired:
-        log.error("sclang timed out after 1800 seconds")
+        log.error("sclang timed out after 3600 seconds")
 
     log.info("Step 5: Mastering renders to %d LUFS", -16)
     try:

@@ -20,13 +20,13 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/swc/Desktop/SWC/software/venv/bin/python</string>
+        <string>/Users/microhm/Desktop/01_Proyectos/SWC/software/venv/bin/python</string>
         <string>-m</string>
         <string>garden_audio.pipeline</string>
     </array>
 
     <key>WorkingDirectory</key>
-    <string>/Users/swc/Desktop/SWC/software</string>
+    <string>/Users/microhm/Desktop/01_Proyectos/SWC/software</string>
 
     <key>StartCalendarInterval</key>
     <dict>
@@ -37,10 +37,10 @@
     </dict>
 
     <key>StandardOutPath</key>
-    <string>/Users/swc/Desktop/SWC/software/daily_datasets/launchd_stdout.log</string>
+    <string>/Users/microhm/Desktop/01_Proyectos/SWC/software/daily_datasets/launchd_stdout.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/swc/Desktop/SWC/software/daily_datasets/launchd_stderr.log</string>
+    <string>/Users/microhm/Desktop/01_Proyectos/SWC/software/daily_datasets/launchd_stderr.log</string>
 
     <key>EnvironmentVariables</key>
     <dict>
